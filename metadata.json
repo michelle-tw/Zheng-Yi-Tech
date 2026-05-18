@@ -1,0 +1,8 @@
+{
+  "name": "ProTrack - 正易科技",
+  "description": "Hệ thống quản lý dự án và chấm công thời gian thực với tính năng tính lương tăng ca tự động, phê duyệt công việc và báo cáo chi tiết cho công ty kỹ thuật 正易科技有限公司.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

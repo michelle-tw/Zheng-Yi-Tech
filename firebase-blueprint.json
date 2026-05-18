@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "System users including super admins, admins, and employees",
+      "type": "object",
+      "properties": {
+        "full_name": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN", "EMPLOYEE"] },
+        "preferred_lang": { "type": "string", "enum": ["vi", "zh-TW"] },
+        "is_active": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["full_name", "username", "role", "preferred_lang"]
+    },
+    "projects": {
+      "title": "Project",
+      "description": "Engineering projects being tracked",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "manager_id": { "type": "string" },
+        "expect_h": { "type": "number" },
+        "status": { "type": "string", "enum": ["RUNNING", "FINISHED", "LOCKED"] },
+        "start_date": { "type": "string", "format": "date" },
+        "end_date": { "type": "string", "format": "date" }
+      },
+      "required": ["name", "expect_h", "status"]
+    },
+    "timesheets": {
+      "title": "Timesheet Entry",
+      "description": "Daily work logs and OT calculations",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "project_id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "work_content": { "type": "string" },
+        "start_time": { "type": "string" },
+        "end_time": { "type": "string" },
+        "normal_h": { "type": "number" },
+        "ot_134_h": { "type": "number" },
+        "ot_167_h": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "comment": { "type": "string" },
+        "approved_by": { "type": "string" },
+        "locked": { "type": "boolean" }
+      },
+      "required": ["user_id", "project_id", "date", "status"]
+    },
+    "audit_logs": {
+      "title": "Audit Log",
+      "description": "Trail of sensitive system changes",
+      "type": "object",
+      "properties": {
+        "admin_id": { "type": "string" },
+        "action": { "type": "string" },
+        "target_user": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "old_value": { "type": "object" },
+        "new_value": { "type": "object" }
+      },
+      "required": ["admin_id", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "users",
+      "description": "User profiles collection"
+    },
+    "projects": {
+      "schema": "projects",
+      "description": "Projects collection"
+    },
+    "timesheets": {
+      "schema": "timesheets",
+      "description": "Timesheet logs collection"
+    },
+    "audit_logs": {
+      "schema": "audit_logs",
+      "description": "System audit trail collection"
+    }
+  }
+}
