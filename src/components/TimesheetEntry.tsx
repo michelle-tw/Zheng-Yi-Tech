@@ -7,6 +7,7 @@ import { collection, addDoc, serverTimestamp, query, where, onSnapshot } from 'f
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { TimesheetStatus, Project, UserProfile, UserRole } from '../types';
+import BulkCloneFlow from './BulkCloneFlow';
 
 export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCancel: () => void, onSubmit?: (data: any) => void, editEntry?: any }) {
   const { t, i18n } = useTranslation();
@@ -270,7 +271,23 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
         </button>
       </div>
 
-      {showSuccess ? (
+      {showSuccess && !editEntry ? (
+        <BulkCloneFlow 
+          userId={'public-' + selectedUserName.trim()}
+          uid={user?.uid || 'guest'}
+          fullName={selectedUserName.trim()}
+          baseAllocations={allocations}
+          baseStartTime={startTime}
+          baseEndTime={endTime}
+          baseRestTimeOption={restTimeOption}
+          baseCustomRestTime={customRestTime}
+          projectsMap={projects.reduce((acc, p) => ({...acc, [p.id]: p.name}), {})}
+          onClose={() => {
+            setShowSuccess(false);
+            onCancel();
+          }}
+        />
+      ) : showSuccess ? (
         <div className="p-10 text-center space-y-6 flex flex-col items-center justify-center min-h-[300px] animate-in fade-in zoom-in duration-300">
           <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center shadow-inner border border-emerald-100">
             <CheckCircle2 size={40} />
@@ -363,6 +380,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
                 <div className="flex items-center gap-1 sm:gap-2">
                   <input 
                     type="time"
+                    step="1800"
                     required
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
@@ -371,6 +389,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
                   <span className="text-slate-400 font-bold shrink-0">→</span>
                   <input 
                     type="time"
+                    step="1800"
                     required
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
