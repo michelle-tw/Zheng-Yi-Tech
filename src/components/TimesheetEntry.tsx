@@ -378,23 +378,29 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
                   <Clock size={12} /> {t('date_time').toUpperCase()}
                 </label>
                 <div className="flex items-center gap-1 sm:gap-2">
-                  <input 
-                    type="time"
-                    step="1800"
+                  <select
                     required
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-1 sm:px-2 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 text-center"
-                  />
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-1 sm:px-2 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 text-center appearance-none"
+                  >
+                    {Array.from({ length: 48 }).map((_, i) => {
+                      const t = `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`;
+                      return <option key={t} value={t}>{t}</option>;
+                    })}
+                  </select>
                   <span className="text-slate-400 font-bold shrink-0">→</span>
-                  <input 
-                    type="time"
-                    step="1800"
+                  <select
                     required
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-1 sm:px-2 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 text-center transition-all"
-                  />
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-1 sm:px-2 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 text-center appearance-none"
+                  >
+                    {Array.from({ length: 48 }).map((_, i) => {
+                      const t = `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`;
+                      return <option key={t} value={t}>{t}</option>;
+                    })}
+                  </select>
                 </div>
               </div>
             </div>

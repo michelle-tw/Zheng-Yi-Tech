@@ -429,15 +429,25 @@ export default function BulkCloneFlow({
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Giờ vào</label>
-                        <input type="time" step="1800" value={day.startTime} onChange={(e) => {
+                        <select value={day.startTime} onChange={(e) => {
                           const n = [...days]; n[dIdx].startTime = e.target.value; setDays(n);
-                        }} className="w-full border border-slate-200 py-2 px-3 rounded-lg text-sm font-bold outline-none focus:border-blue-500" />
+                        }} className="w-full border border-slate-200 py-2 px-3 rounded-lg text-sm font-bold outline-none focus:border-blue-500 appearance-none bg-white">
+                          {Array.from({ length: 48 }).map((_, i) => {
+                            const t = `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`;
+                            return <option key={t} value={t}>{t}</option>;
+                          })}
+                        </select>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Giờ ra</label>
-                        <input type="time" step="1800" value={day.endTime} onChange={(e) => {
+                        <select value={day.endTime} onChange={(e) => {
                           const n = [...days]; n[dIdx].endTime = e.target.value; setDays(n);
-                        }} className="w-full border border-slate-200 py-2 px-3 rounded-lg text-sm font-bold outline-none focus:border-blue-500" />
+                        }} className="w-full border border-slate-200 py-2 px-3 rounded-lg text-sm font-bold outline-none focus:border-blue-500 appearance-none bg-white">
+                          {Array.from({ length: 48 }).map((_, i) => {
+                            const t = `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`;
+                            return <option key={t} value={t}>{t}</option>;
+                          })}
+                        </select>
                       </div>
                     </div>
                     {/* Add basic allocation editor here if needed, or keep it read-only for allocations and let them edit hours if simple. BUT requirement says edit hours or content. So we should show a mini allocation list. */}

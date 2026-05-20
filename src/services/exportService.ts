@@ -65,52 +65,52 @@ export async function exportTimesheetToExcel(
   const titleCell = worksheet.getCell(1, 1);
   titleCell.value = "正易科技有限公司 專案工時統計表";
   titleCell.font = { name: 'Microsoft JhengHei', size: 20, bold: true };
-  titleCell.alignment = { vertical: 'center', horizontal: 'center' };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
   // --- Owner & Stats block (Last 4 columns, Rows 1-3) ---
   worksheet.mergeCells(1, TC - 3, 1, TC - 2);
   const ownerLabelCell = worksheet.getCell(1, TC - 3);
   ownerLabelCell.value = "負責人";
   ownerLabelCell.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  ownerLabelCell.alignment = { vertical: 'center', horizontal: 'center' };
+  ownerLabelCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
   worksheet.mergeCells(1, TC - 1, 1, TC);
   const ownerValueCell = worksheet.getCell(1, TC - 1);
   ownerValueCell.value = managerName;
   ownerValueCell.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  ownerValueCell.alignment = { vertical: 'center', horizontal: 'center' };
+  ownerValueCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
   worksheet.mergeCells(2, TC - 3, 2, TC - 2);
   const sumNLabel = worksheet.getCell(2, TC - 3);
   sumNLabel.value = "平日(全)";
   sumNLabel.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  sumNLabel.alignment = { vertical: 'center', horizontal: 'center' };
+  sumNLabel.alignment = { vertical: 'middle', horizontal: 'center' };
 
   worksheet.mergeCells(2, TC - 1, 2, TC);
   const sumNValue = worksheet.getCell(2, TC - 1);
   sumNValue.value = data.filter(e => e.status === 'APPROVED').reduce((sum, e) => sum + e.normal_h, 0);
   sumNValue.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  sumNValue.alignment = { vertical: 'center', horizontal: 'center' };
+  sumNValue.alignment = { vertical: 'middle', horizontal: 'center' };
 
   const sum134Label = worksheet.getCell(3, TC - 3);
   sum134Label.value = "1.34(全)";
   sum134Label.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  sum134Label.alignment = { vertical: 'center', horizontal: 'center' };
+  sum134Label.alignment = { vertical: 'middle', horizontal: 'center' };
 
   const sum134Value = worksheet.getCell(3, TC - 2);
   sum134Value.value = data.filter(e => e.status === 'APPROVED').reduce((sum, e) => sum + e.ot_134_h, 0);
   sum134Value.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  sum134Value.alignment = { vertical: 'center', horizontal: 'center' };
+  sum134Value.alignment = { vertical: 'middle', horizontal: 'center' };
 
   const sum167Label = worksheet.getCell(3, TC - 1);
   sum167Label.value = "1.67(全)";
   sum167Label.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  sum167Label.alignment = { vertical: 'center', horizontal: 'center' };
+  sum167Label.alignment = { vertical: 'middle', horizontal: 'center' };
 
   const sum167Value = worksheet.getCell(3, TC);
   sum167Value.value = data.filter(e => e.status === 'APPROVED').reduce((sum, e) => sum + e.ot_167_h, 0);
   sum167Value.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  sum167Value.alignment = { vertical: 'center', horizontal: 'center' };
+  sum167Value.alignment = { vertical: 'middle', horizontal: 'center' };
 
   for (let r = 1; r <= 3; r++) {
     for (let c = TC - 3; c <= TC; c++) {
@@ -125,7 +125,7 @@ export async function exportTimesheetToExcel(
   const prjLabel = worksheet.getCell(4, 1);
   prjLabel.value = `專案名稱： ${project?.name || ''}`;
   prjLabel.font = { name: 'Microsoft JhengHei', size: 11, bold: true };
-  prjLabel.alignment = { vertical: 'center', horizontal: 'left' };
+  prjLabel.alignment = { vertical: 'middle', horizontal: 'left' };
   prjLabel.border = { bottom: { style: 'medium' } };
   worksheet.getCell(4, 2).border = { bottom: { style: 'medium' } };
   worksheet.getCell(4, 3).border = { bottom: { style: 'medium' } };
@@ -148,7 +148,7 @@ export async function exportTimesheetToExcel(
   headerRow.eachCell((cell, colNum) => {
     if (colNum <= TC) {
       cell.font = { name: 'Microsoft JhengHei', bold: true, size: 10 };
-      cell.alignment = { horizontal: 'center', vertical: 'center' };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
       cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
     }
   });
@@ -200,7 +200,7 @@ export async function exportTimesheetToExcel(
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       if (colNumber <= TC) {
         cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-        cell.alignment = { vertical: 'center', horizontal: 'center' };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
         cell.font = { name: 'Microsoft JhengHei', size: 10 };
       }
     });
