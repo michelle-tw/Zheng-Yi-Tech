@@ -42,6 +42,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
 
   const [restTimeOption, setRestTimeOption] = useState('0'); // '0', '0.5', '1', '1.5', '2', 'custom'
   const [customRestTime, setCustomRestTime] = useState(''); // in hours as string
+  const [indirectHours, setIndirectHours] = useState(editEntry?.indirect_hours?.toString() || '0');
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -88,7 +89,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
     name !== selectedUserName
   );
 
-  const getOT = () => {
+  const getPaidHours = () => {
     const start = new Date(`2000-01-01T${startTime}`);
     const end = new Date(`2000-01-01T${endTime}`);
     let diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
@@ -102,21 +103,25 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
       }
       
       diff -= restHours;
-      if (diff < 0) diff = 0;
-
-      const d = new Date(date);
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-
-      return calculateOT(diff, isWeekend);
+      return diff < 0 ? 0 : diff;
     }
-    return { normal: 0, ot134: 0, ot167: 0 };
+    return 0;
+  };
+
+  const totalPaidHours = getPaidHours();
+  const parsedIndirectHours = parseFloat(indirectHours) || 0;
+  const totalProjectHours = Math.max(0, totalPaidHours - parsedIndirectHours);
+
+  const getOT = () => {
+    const d = new Date(date);
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    return calculateOT(totalPaidHours, isWeekend);
   };
 
   const ot = getOT();
 
-  const totalActualHours = ot.normal + ot.ot134 + ot.ot167;
   const totalAllocatedHours = allocations.reduce((sum, a) => sum + (parseFloat(a.hours) || 0), 0);
-  const isMatch = !!editEntry || Math.abs(totalActualHours - totalAllocatedHours) < 0.01;
+  const isMatch = !!editEntry || Math.abs(totalProjectHours - totalAllocatedHours) < 0.01;
   const isValidAllocations = allocations.every(a => 
       a.projectId && 
       parseFloat(a.hours) > 0 && 
@@ -124,7 +129,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
       (a.workOption !== '其他' || a.content.trim())
   );
   // Also pass validation if editEntry
-  const isSubmitDisabled = loading || !selectedUserName.trim() || !isMatch || !isValidAllocations || (!editEntry && totalActualHours === 0);
+  const isSubmitDisabled = loading || !selectedUserName.trim() || !isMatch || !isValidAllocations || (!editEntry && totalPaidHours === 0);
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,8 +138,8 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
       return;
     }
 
-    if ((!isMatch && !editEntry) || !isValidAllocations || (!editEntry && totalActualHours === 0)) {
-      setError(t('hours_mismatch_error'));
+    if ((!isMatch && !editEntry) || !isValidAllocations || (!editEntry && totalPaidHours === 0)) {
+      setError(i18n.language === 'zh' ? '總分配工時不匹配' : 'Tổng phân bổ công việc không khớp với tổng giờ làm dự án (總分配工時不匹配)');
       return;
     }
 
@@ -187,19 +192,32 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
           ot_167_h: p167,
           work_content: finalContent,
           updated_at: serverTimestamp(),
-          created_by_name: selectedUserName.trim()
+          created_by_name: selectedUserName.trim(),
+          indirect_hours: alloc.projectId === 'indirect' ? parseFloat(indirectHours) || 0 : 0
         };
 
         batch.set(doc(db, 'timesheets', editEntry.id), entry, { merge: true });
 
       } else {
-        // CREATE MODE: We distribute the global shift into the allocations
+        // CREATE MODE: We distribute the global shift into the allocations (including indirect if > 0)
         let remainingNormal = ot.normal;
         let remaining134 = ot.ot134;
         let remaining167 = ot.ot167;
 
-        for (let i = 0; i < allocations.length; i++) {
-          const alloc = allocations[i];
+        const finalDbAllocations = [...allocations];
+        const parsedIndirect = parseFloat(indirectHours) || 0;
+        if (parsedIndirect > 0) {
+          finalDbAllocations.push({
+            id: Date.now() + 1234,
+            projectId: 'indirect',
+            hours: parsedIndirect.toString(),
+            workOption: '會議 / 打掃',
+            content: '間接工時 (Họp / Dọn dẹp)'
+          });
+        }
+
+        for (let i = 0; i < finalDbAllocations.length; i++) {
+          const alloc = finalDbAllocations[i];
           let h = parseFloat(alloc.hours) || 0;
           let pNormal = 0, p134 = 0, p167 = 0;
 
@@ -222,7 +240,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
             h -= take;
           }
 
-          const finalContent = alloc.workOption === '其他' ? alloc.content : alloc.workOption;
+          const finalContent = alloc.workOption === '其他' ? alloc.content : (alloc.projectId === 'indirect' ? alloc.content : alloc.workOption);
 
           const entry = {
             user_id: 'public-' + selectedUserName.trim(),
@@ -239,7 +257,8 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
             locked: false,
             created_by: user?.uid || 'guest',
             created_by_name: selectedUserName.trim(),
-            updated_at: serverTimestamp()
+            updated_at: serverTimestamp(),
+            indirect_hours: alloc.projectId === 'indirect' ? parsedIndirect : 0
           };
 
           const newRef = doc(collection(db, 'timesheets'));
@@ -281,6 +300,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
           baseEndTime={endTime}
           baseRestTimeOption={restTimeOption}
           baseCustomRestTime={customRestTime}
+          baseIndirectHours={indirectHours}
           projectsMap={projects.reduce((acc, p) => ({...acc, [p.id]: p.name}), {})}
           onClose={() => {
             setShowSuccess(false);
@@ -435,12 +455,43 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
               )}
             </div>
             
-            <div className="space-y-1.5 pt-2">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                <Clock size={12} className="text-emerald-500" /> {t('total_actual_hours')}
+                <Clock size={12} className="text-purple-500" /> {i18n.language === 'zh' ? '會議 / 打掃' : 'Họp / Dọn dẹp'} ({i18n.language === 'zh' ? '間接工時' : 'Giờ gián tiếp'})
               </label>
-              <div className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm font-black text-emerald-700">
-                {ot.normal + ot.ot134 + ot.ot167}h
+              <select 
+                value={indirectHours}
+                onChange={(e) => setIndirectHours(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold appearance-none font-sans"
+              >
+                {Array.from({ length: 17 }).map((_, i) => {
+                  const val = (i * 0.5).toFixed(1);
+                  const displayVal = i === 0 ? (i18n.language === 'zh' ? '0" 小時' : '0 giờ') : `${val}h`;
+                  if (i === 0) {
+                    return <option key={val} value={val}>{i18n.language === 'zh' ? '0 小時' : '0 giờ'}</option>;
+                  }
+                  return <option key={val} value={val}>{val}h</option>;
+                })}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                  <Clock size={12} className="text-slate-500" /> {i18n.language === 'zh' ? '總計薪工時' : 'Tổng giờ tính lương'}
+                </label>
+                <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700">
+                  {totalPaidHours.toFixed(1)}h
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 flex items-center gap-2">
+                  <Clock size={12} className="text-emerald-500" /> {i18n.language === 'zh' ? '總專案工時' : 'Tổng giờ làm dự án'}
+                </label>
+                <div className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm font-black text-emerald-700">
+                  {totalProjectHours.toFixed(1)}h
+                </div>
               </div>
             </div>
 
@@ -577,7 +628,7 @@ export default function TimesheetEntry({ onCancel, onSubmit, editEntry }: { onCa
           
           {(!isMatch && totalAllocatedHours > 0) && (
             <div className="flex items-center gap-2 text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100 italic mt-2">
-              <AlertCircle size={14} /> {t('hours_mismatch_error')}
+              <AlertCircle size={14} /> {i18n.language === 'zh' ? '總分配工時不匹配' : 'Tổng phân bổ công việc không khớp với tổng giờ làm dự án (總分配工時不匹配)'}
             </div>
           )}
 

@@ -21,6 +21,7 @@ interface BulkCloneFlowProps {
   baseEndTime: string;
   baseRestTimeOption: string;
   baseCustomRestTime: string;
+  baseIndirectHours: string;
   projectsMap: Record<string, string>;
   onClose: () => void;
   uid: string; // The logged in user uid
@@ -37,6 +38,7 @@ interface DayState {
   endTime: string;
   restTimeOption: string;
   customRestTime: string;
+  indirectHours: string;
   isEditing: boolean;
   error?: string;
 }
@@ -49,6 +51,7 @@ export default function BulkCloneFlow({
   baseEndTime, 
   baseRestTimeOption, 
   baseCustomRestTime,
+  baseIndirectHours,
   projectsMap,
   onClose,
   uid
@@ -122,6 +125,7 @@ export default function BulkCloneFlow({
           endTime: baseEndTime,
           restTimeOption: baseRestTimeOption,
           customRestTime: baseCustomRestTime,
+          indirectHours: baseIndirectHours,
           isEditing: false
         });
 
@@ -152,11 +156,35 @@ export default function BulkCloneFlow({
       }
       
       diff -= restHours;
-      if (diff < 0) diff = 0;
-
-      return calculateOT(diff, day.isWeekend);
+      return calculateOT(diff < 0 ? 0 : diff, day.isWeekend);
     }
     return { normal: 0, ot134: 0, ot167: 0 };
+  };
+
+  const getProjectHoursForDay = (day: DayState) => {
+    const ot = getOTForDay(day);
+    const totalPaid = ot.normal + ot.ot134 + ot.ot167;
+    const parsedInd = parseFloat(day.indirectHours) || 0;
+    return Math.max(0, totalPaid - parsedInd);
+  };
+
+  const dayHasErrorObj = (day: DayState) => {
+    if (day.hasData || !day.selected) return null;
+    const projectHours = getProjectHoursForDay(day);
+    const totalAllocated = day.allocations.reduce((sum, a) => sum + (parseFloat(a.hours) || 0), 0);
+    if (Math.abs(projectHours - totalAllocated) > 0.01) {
+      return i18n.language === 'zh' ? `總分配工時不匹配 ( 專案工時：${projectHours.toFixed(1)}h, 分配工時：${totalAllocated.toFixed(1)}h )` : `Tổng phân bổ công việc không khớp với tổng giờ làm dự án (Dự án: ${projectHours.toFixed(1)}h, Phân bổ: ${totalAllocated.toFixed(1)}h)`;
+    }
+    const isValid = day.allocations.every(a => 
+      a.projectId && 
+      parseFloat(a.hours) > 0 && 
+      a.workOption && 
+      (a.workOption !== '其他' || (a.content && a.content.trim()))
+    );
+    if (!isValid) {
+      return i18n.language === 'zh' ? '請填寫完整的分配資訊' : 'Vui lòng nhập đầy đủ thông tin phân bổ';
+    }
+    return null;
   };
 
   const submitAll = async () => {
@@ -170,24 +198,9 @@ export default function BulkCloneFlow({
     
     // Validate
     for (const day of selectedDays) {
-      const ot = getOTForDay(day);
-      const totalActual = ot.normal + ot.ot134 + ot.ot167;
-      const totalAllocated = day.allocations.reduce((sum, a) => sum + (parseFloat(a.hours) || 0), 0);
-      
-      if (Math.abs(totalActual - totalAllocated) > 0.01) {
-        setDays(prev => prev.map(d => d.date === day.date ? { ...d, error: t('hours_mismatch_error') } : d));
-        setLoading(false);
-        return;
-      }
-      
-      const isValid = day.allocations.every(a => 
-        a.projectId && 
-        parseFloat(a.hours) > 0 && 
-        a.workOption && 
-        (a.workOption !== '其他' || a.content.trim())
-      );
-      if (!isValid) {
-        setDays(prev => prev.map(d => d.date === day.date ? { ...d, error: 'Invalid allocations' } : d));
+      const errStr = dayHasErrorObj(day);
+      if (errStr) {
+        setDays(prev => prev.map(d => d.date === day.date ? { ...d, error: errStr } : d));
         setLoading(false);
         return;
       }
@@ -203,8 +216,20 @@ export default function BulkCloneFlow({
         let remaining134 = ot.ot134;
         let remaining167 = ot.ot167;
 
-        for (let i = 0; i < day.allocations.length; i++) {
-          const alloc = day.allocations[i];
+        const dayAllocations = [...day.allocations];
+        const parsedIndirect = parseFloat(day.indirectHours) || 0;
+        if (parsedIndirect > 0) {
+          dayAllocations.push({
+            id: Date.now() + Math.random(),
+            projectId: 'indirect',
+            hours: parsedIndirect.toString(),
+            workOption: '會議 / 打掃',
+            content: '間接工時 (Họp / Dọn dẹp)'
+          });
+        }
+
+        for (let i = 0; i < dayAllocations.length; i++) {
+          const alloc = dayAllocations[i];
           let h = parseFloat(alloc.hours) || 0;
           let pNormal = 0, p134 = 0, p167 = 0;
 
@@ -227,7 +252,7 @@ export default function BulkCloneFlow({
             h -= take;
           }
 
-          const finalContent = alloc.workOption === '其他' ? alloc.content : alloc.workOption;
+          const finalContent = alloc.workOption === '其他' ? alloc.content : (alloc.projectId === 'indirect' ? alloc.content : alloc.workOption);
 
           const entry = {
             user_id: userId,
@@ -245,7 +270,8 @@ export default function BulkCloneFlow({
             created_by: uid,
             created_by_name: fullName,
             updated_at: serverTimestamp(),
-            created_at: serverTimestamp()
+            created_at: serverTimestamp(),
+            indirect_hours: alloc.projectId === 'indirect' ? parsedIndirect : 0
           };
 
           const newRef = doc(collection(db!, 'timesheets'));
@@ -364,50 +390,52 @@ export default function BulkCloneFlow({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-          {days.map((day, dIdx) => (
-            <div key={day.date} className={`border rounded-2xl overflow-hidden transition-all ${day.hasData ? 'border-slate-200 bg-slate-50 opacity-60' : day.isWeekend ? 'border-amber-200 bg-amber-50/30' : day.selected ? 'border-blue-200 bg-blue-50/30 ring-1 ring-blue-100' : 'border-slate-200 bg-white'}`}>
-               <div className="p-4 flex items-start gap-4">
-                  <button 
-                    disabled={day.hasData} 
-                    onClick={() => {
-                      const newDays = [...days];
-                      newDays[dIdx].selected = !newDays[dIdx].selected;
-                      setDays(newDays);
-                    }}
-                    className="mt-1 focus:outline-none disabled:opacity-50"
-                  >
-                    {day.selected ? (
-                      <CheckSquare size={20} className="text-blue-600" />
-                    ) : (
-                      <Square size={20} className={day.hasData ? "text-slate-300" : "text-slate-400"} />
-                    )}
-                  </button>
-                  <div className="flex-1 space-y-1">
-                     <div className="flex items-center gap-2">
-                       <h4 className={`font-black uppercase tracking-tight text-sm ${day.hasData ? 'text-slate-500' : 'text-slate-800'}`}>
-                         {day.label}
-                       </h4>
-                       {day.hasData && <span className="text-[9px] font-bold uppercase tracking-widest bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-sm">{t('day_existing_data')}</span>}
-                       {(!day.hasData && day.isWeekend) && <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-sm">{t('day_weekend_holiday')}</span>}
-                     </div>
-                     
-                     <div className="text-xs font-medium text-slate-600">
-                       <p><span className="font-bold text-slate-400">Time:</span> {day.startTime} - {day.endTime}</p>
-                       <div className="mt-1.5 space-y-1">
-                         {day.allocations.map(a => (
-                           <div key={a.id} className="bg-slate-100/50 rounded-md p-1.5 flex items-center gap-1.5 border border-slate-100">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                              <span className="font-bold">{projectsMap[a.projectId] || 'Project'}</span>
-                              <span className="text-slate-400">-</span>
-                              <span className="font-black text-blue-600">{a.hours}h</span>
-                              <span className="text-slate-400">-</span>
-                              <span className="italic">{a.workOption === '其他' ? a.content : a.workOption}</span>
-                           </div>
-                         ))}
+          {days.map((day, dIdx) => {
+            const hasError = dayHasErrorObj(day);
+            return (
+              <div key={day.date} className={`border rounded-2xl overflow-hidden transition-all ${day.hasData ? 'border-slate-200 bg-slate-50 opacity-60' : hasError ? 'border-red-300 bg-red-50/10 ring-1 ring-red-100' : day.isWeekend ? 'border-amber-200 bg-amber-50/30' : day.selected ? 'border-blue-200 bg-blue-50/30 ring-1 ring-blue-100' : 'border-slate-200 bg-white'}`}>
+                 <div className="p-4 flex items-start gap-4">
+                    <button 
+                      disabled={day.hasData} 
+                      onClick={() => {
+                        const newDays = [...days];
+                        newDays[dIdx].selected = !newDays[dIdx].selected;
+                        setDays(newDays);
+                      }}
+                      className="mt-1 focus:outline-none disabled:opacity-50"
+                    >
+                      {day.selected ? (
+                        <CheckSquare size={20} className="text-blue-600" />
+                      ) : (
+                        <Square size={20} className={day.hasData ? "text-slate-300" : "text-slate-400"} />
+                      )}
+                    </button>
+                    <div className="flex-1 space-y-1">
+                       <div className="flex items-center gap-2">
+                         <h4 className={`font-black uppercase tracking-tight text-sm ${day.hasData ? 'text-slate-500' : 'text-slate-800'}`}>
+                           {day.label}
+                         </h4>
+                         {day.hasData && <span className="text-[9px] font-bold uppercase tracking-widest bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-sm">{t('day_existing_data')}</span>}
+                         {(!day.hasData && day.isWeekend) && <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-sm">{t('day_weekend_holiday')}</span>}
                        </div>
-                     </div>
-                     {day.error && <p className="text-xs text-red-500 font-bold italic pt-1">{day.error}</p>}
-                  </div>
+                       
+                       <div className="text-xs font-medium text-slate-600">
+                         <p><span className="font-bold text-slate-400">Time:</span> {day.startTime} - {day.endTime}</p>
+                         <div className="mt-1.5 space-y-1">
+                           {day.allocations.map(a => (
+                             <div key={a.id} className="bg-slate-100/50 rounded-md p-1.5 flex items-center gap-1.5 border border-slate-100">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                <span className="font-bold">{projectsMap[a.projectId] || 'Project'}</span>
+                                <span className="text-slate-400">-</span>
+                                <span className="font-black text-blue-600">{a.hours}h</span>
+                                <span className="text-slate-400">-</span>
+                                <span className="italic">{a.workOption === '其他' ? a.content : a.workOption}</span>
+                             </div>
+                           ))}
+                         </div>
+                       </div>
+                       {hasError && <p className="text-xs text-red-500 font-bold italic pt-1 flex items-center gap-1"><AlertCircle size={12}/> {hasError}</p>}
+                    </div>
                   
                   {!day.hasData && (
                     <button 
@@ -448,6 +476,75 @@ export default function BulkCloneFlow({
                             return <option key={t} value={t}>{t}</option>;
                           })}
                         </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                          {i18n.language === 'zh' ? '會議 / 打掃' : 'Họp / Dọn dẹp'} ({i18n.language === 'zh' ? '間接工時' : 'Giờ gián tiếp'})
+                        </label>
+                        <select 
+                          value={day.indirectHours} 
+                          onChange={(e) => {
+                            const n = [...days]; n[dIdx].indirectHours = e.target.value; setDays(n);
+                          }} 
+                          className="w-full border border-slate-200 py-2 px-3 rounded-lg text-sm font-bold outline-none focus:border-blue-500 appearance-none bg-white font-sans"
+                        >
+                          {Array.from({ length: 17 }).map((_, i) => {
+                            const val = (i * 0.5).toFixed(1);
+                            const displayVal = i === 0 ? (i18n.language === 'zh' ? '0 小時' : '0 giờ') : `${val}h`;
+                            return <option key={val} value={val}>{displayVal}</option>;
+                          })}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                          {t('rest_time')}
+                        </label>
+                        <select 
+                          value={day.restTimeOption} 
+                          onChange={(e) => {
+                            const n = [...days]; n[dIdx].restTimeOption = e.target.value; setDays(n);
+                          }} 
+                          className="w-full border border-slate-200 py-2 px-3 rounded-lg text-sm font-bold outline-none focus:border-blue-500 appearance-none bg-white font-sans"
+                        >
+                          <option value="0">{t('no_rest')}</option>
+                          <option value="0.5">{t('rest_30m')}</option>
+                          <option value="1">{t('rest_1h')}</option>
+                          <option value="1.5">{t('rest_1h30m')}</option>
+                          <option value="2">{t('rest_2h')}</option>
+                          <option value="custom">{t('rest_custom')}</option>
+                        </select>
+                        {day.restTimeOption === 'custom' && (
+                          <input 
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            required
+                            value={day.customRestTime}
+                            onChange={(e) => {
+                              const n = [...days]; n[dIdx].customRestTime = e.target.value; setDays(n);
+                            }}
+                            placeholder={t('rest_custom_placeholder')}
+                            className="w-full mt-1.5 border border-slate-200 py-1.5 px-3 rounded-lg text-xs font-bold font-sans"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 py-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <div className="text-center">
+                        <p className="text-[9px] font-bold text-slate-500 uppercase">{i18n.language === 'zh' ? '總計薪工時' : 'Tổng giờ tính lương'}</p>
+                        <p className="text-xs font-black text-slate-800">
+                          {(getOTForDay(day).normal + getOTForDay(day).ot134 + getOTForDay(day).ot167).toFixed(1)}h
+                        </p>
+                      </div>
+                      <div className="text-center border-l border-slate-200">
+                        <p className="text-[9px] font-bold text-emerald-500 uppercase">{i18n.language === 'zh' ? '總專案工時' : 'Tổng giờ làm dự án'}</p>
+                        <p className="text-xs font-black text-emerald-600">
+                          {getProjectHoursForDay(day).toFixed(1)}h
+                        </p>
                       </div>
                     </div>
                     {/* Add basic allocation editor here if needed, or keep it read-only for allocations and let them edit hours if simple. BUT requirement says edit hours or content. So we should show a mini allocation list. */}
@@ -498,13 +595,14 @@ export default function BulkCloneFlow({
                  </div>
                )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-white shrink-0">
            {error && <div className="text-xs text-red-500 italic pb-3 font-bold text-center">{error}</div>}
            <button 
-             disabled={loading || !hasSelected} 
+             disabled={loading || !hasSelected || days.some(d => d.selected && !d.hasData && dayHasErrorObj(d) !== null)} 
              onClick={submitAll} 
              className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest text-sm shadow-lg shadow-blue-600/20 disabled:opacity-50 flex justify-center items-center gap-2 transition-all active:scale-[0.98]"
            >

@@ -145,7 +145,9 @@ export default function TimesheetHistory() {
             <div className="flex justify-between items-start mb-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="text-sm font-black uppercase italic">{projects[entry.project_id] || t('unknown_project')}</span>
+                  <span className={cn("text-sm font-black uppercase italic", entry.project_id === 'indirect' ? "text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200" : "text-slate-800")}>
+                    {entry.project_id === 'indirect' ? (i18n.language === 'zh' ? '會議 / 打掃 (間接工時)' : 'Họp / Dọn dẹp (Giờ gián tiếp)') : (projects[entry.project_id] || t('unknown_project'))}
+                  </span>
                   <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-black rounded-lg uppercase">
                     <UserIcon size={12}/> {entry.full_name}
                   </div>
